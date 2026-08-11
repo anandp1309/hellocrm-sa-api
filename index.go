@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"hellocrm-superadmin/internal/server"
+	"hellocrm-superadmin/server"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"

@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"time"
 
-	"hellocrm-superadmin/internal/server"
+	"hellocrm-superadmin/server"
 
 	"github.com/joho/godotenv"
 )
