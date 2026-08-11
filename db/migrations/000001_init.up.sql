@@ -1,3 +1,75 @@
+DROP TABLE IF EXISTS booking_payment CASCADE;
+DROP TABLE IF EXISTS lead CASCADE;
+DROP TABLE IF EXISTS role CASCADE;
+DROP TABLE IF EXISTS tenant_addon_purchase CASCADE;
+DROP TABLE IF EXISTS tag_assigned CASCADE;
+DROP TABLE IF EXISTS shared_content_log CASCADE;
+DROP TABLE IF EXISTS mst_plan_price CASCADE;
+DROP TABLE IF EXISTS user_session CASCADE;
+DROP TABLE IF EXISTS tenant_setting CASCADE;
+DROP TABLE IF EXISTS message_log CASCADE;
+DROP TABLE IF EXISTS user_workspace CASCADE;
+DROP TABLE IF EXISTS workspace CASCADE;
+DROP TABLE IF EXISTS workspace_assignment_rule CASCADE;
+DROP TABLE IF EXISTS mst_permission CASCADE;
+DROP TABLE IF EXISTS tenant_number_series CASCADE;
+DROP TABLE IF EXISTS mst_universal CASCADE;
+DROP TABLE IF EXISTS document CASCADE;
+DROP TABLE IF EXISTS user_device CASCADE;
+DROP TABLE IF EXISTS campaign_import CASCADE;
+DROP TABLE IF EXISTS call_log CASCADE;
+DROP TABLE IF EXISTS booking_cancellation CASCADE;
+DROP TABLE IF EXISTS campaign_member CASCADE;
+DROP TABLE IF EXISTS role_permission CASCADE;
+DROP TABLE IF EXISTS unit CASCADE;
+DROP TABLE IF EXISTS calling_list_record CASCADE;
+DROP TABLE IF EXISTS user_tenant CASCADE;
+DROP TABLE IF EXISTS booking_parking CASCADE;
+DROP TABLE IF EXISTS unit_hold CASCADE;
+DROP TABLE IF EXISTS tenant_subscription_payment CASCADE;
+DROP TABLE IF EXISTS property_block_stage_progress CASCADE;
+DROP TABLE IF EXISTS parking CASCADE;
+DROP TABLE IF EXISTS mst_module CASCADE;
+DROP TABLE IF EXISTS note CASCADE;
+DROP TABLE IF EXISTS quotation CASCADE;
+DROP TABLE IF EXISTS tenant CASCADE;
+DROP TABLE IF EXISTS mst_status CASCADE;
+DROP TABLE IF EXISTS booking_charge CASCADE;
+DROP TABLE IF EXISTS "user" CASCADE;
+DROP TABLE IF EXISTS activity CASCADE;
+DROP TABLE IF EXISTS mst_currency CASCADE;
+DROP TABLE IF EXISTS property CASCADE;
+DROP TABLE IF EXISTS tag CASCADE;
+DROP TABLE IF EXISTS booking CASCADE;
+DROP TABLE IF EXISTS calling_list CASCADE;
+DROP TABLE IF EXISTS campaign CASCADE;
+DROP TABLE IF EXISTS message_template CASCADE;
+DROP TABLE IF EXISTS user_auth CASCADE;
+DROP TABLE IF EXISTS opportunity CASCADE;
+DROP TABLE IF EXISTS property_block CASCADE;
+DROP TABLE IF EXISTS booking_storage CASCADE;
+DROP TABLE IF EXISTS property_transaction CASCADE;
+DROP TABLE IF EXISTS commission CASCADE;
+DROP TABLE IF EXISTS tenant_subscription CASCADE;
+DROP TABLE IF EXISTS commission_payment CASCADE;
+DROP TABLE IF EXISTS tenant_usage_ledger CASCADE;
+DROP TABLE IF EXISTS user_otp CASCADE;
+DROP TABLE IF EXISTS booking_discount CASCADE;
+DROP TABLE IF EXISTS mst_master_type CASCADE;
+DROP TABLE IF EXISTS audit_log CASCADE;
+DROP TABLE IF EXISTS webhook_log CASCADE;
+DROP TABLE IF EXISTS saved_filter CASCADE;
+DROP TABLE IF EXISTS contact CASCADE;
+DROP TABLE IF EXISTS storage CASCADE;
+DROP TABLE IF EXISTS user_login_history CASCADE;
+DROP TABLE IF EXISTS quotation_charge CASCADE;
+DROP TABLE IF EXISTS media CASCADE;
+DROP TABLE IF EXISTS site_visit CASCADE;
+DROP TABLE IF EXISTS booking_refund CASCADE;
+DROP TABLE IF EXISTS message_queue CASCADE;
+DROP TABLE IF EXISTS mst_plan CASCADE;
+DROP TABLE IF EXISTS quotation_discount CASCADE;
+
 -- PostgreSQL Database Dump Migration Script
 -- Target Engine: PostgreSQL 18 (Optimized for UUIDv7 Application Strategies)
 
@@ -1498,6 +1570,7 @@ CREATE TABLE role (
   role_name VARCHAR(100) NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
   is_system BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   remarks VARCHAR(500) DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NULL,
   created_by_user_uuid UUID DEFAULT NULL,
@@ -1522,7 +1595,9 @@ CREATE TABLE role_permission (
   role_permission_uuid UUID NOT NULL,
   tenant_uuid UUID DEFAULT NULL,
   role_uuid UUID NOT NULL,
+  module_uuid UUID NOT NULL,
   permission_uuid UUID NOT NULL,
+  is_granted BOOLEAN NOT NULL DEFAULT FALSE,
   remarks VARCHAR(500) DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NULL,
   created_by_user_uuid UUID DEFAULT NULL,
@@ -1534,11 +1609,13 @@ CREATE TABLE role_permission (
   deleted_at TIMESTAMPTZ DEFAULT NULL,
   deleted_by_user_uuid UUID DEFAULT NULL,
   PRIMARY KEY (role_permission_uuid),
-  CONSTRAINT uk_role_permission UNIQUE (tenant_uuid, role_uuid, permission_uuid)
+  CONSTRAINT uk_role_permission UNIQUE (tenant_uuid, role_uuid, module_uuid, permission_uuid),
+  CONSTRAINT fk_role_permission_module FOREIGN KEY (module_uuid) REFERENCES mst_module (module_uuid)
 );
 
 CREATE INDEX idx_role_permission_tenant ON role_permission (tenant_uuid);
 CREATE INDEX idx_role_permission_role ON role_permission (role_uuid);
+CREATE INDEX idx_role_permission_module ON role_permission (module_uuid);
 CREATE INDEX idx_role_permission_item ON role_permission (permission_uuid);
 CREATE INDEX idx_role_permission_is_deleted ON role_permission (is_deleted);
 

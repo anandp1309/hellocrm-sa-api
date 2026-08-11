@@ -1028,6 +1028,7 @@ type Role struct {
 	RoleName           string             `json:"role_name"`
 	SortOrder          int32              `json:"sort_order"`
 	IsSystem           bool               `json:"is_system"`
+	IsActive           bool               `json:"is_active"`
 	Remarks            pgtype.Text        `json:"remarks"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	CreatedByUserUuid  pgtype.UUID        `json:"created_by_user_uuid"`
@@ -1044,7 +1045,9 @@ type RolePermission struct {
 	RolePermissionUuid pgtype.UUID        `json:"role_permission_uuid"`
 	TenantUuid         pgtype.UUID        `json:"tenant_uuid"`
 	RoleUuid           pgtype.UUID        `json:"role_uuid"`
+	ModuleUuid         pgtype.UUID        `json:"module_uuid"`
 	PermissionUuid     pgtype.UUID        `json:"permission_uuid"`
+	IsGranted          bool               `json:"is_granted"`
 	Remarks            pgtype.Text        `json:"remarks"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	CreatedByUserUuid  pgtype.UUID        `json:"created_by_user_uuid"`

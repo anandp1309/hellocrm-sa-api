@@ -17,6 +17,7 @@ var (
 type Actor struct {
 	UserID      uuid.UUID
 	TenantID    *uuid.UUID // Can be nil for superadmins
+	TenantName  string     // Added for response
 	Role        string
 	RoleID      string // Added for Casbin
 	Permissions map[string]struct{}

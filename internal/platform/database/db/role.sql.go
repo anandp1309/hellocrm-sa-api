@@ -11,13 +11,148 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addRolePermission = `-- name: AddRolePermission :exec
+WITH updated AS (
+    UPDATE role_permission
+    SET is_granted = TRUE, is_deleted = FALSE, updated_at = NOW()
+    WHERE role_uuid = $2 AND module_uuid = $3 AND permission_uuid = $4
+    RETURNING role_permission_uuid
+)
+INSERT INTO role_permission (role_permission_uuid, tenant_uuid, role_uuid, module_uuid, permission_uuid, is_granted, created_at)
+SELECT $1, (SELECT tenant_uuid FROM role WHERE role_uuid = $2), $2, $3, $4, TRUE, NOW()
+WHERE NOT EXISTS (SELECT 1 FROM updated)
+`
+
+type AddRolePermissionParams struct {
+	RolePermissionUuid pgtype.UUID `json:"role_permission_uuid"`
+	RoleUuid           pgtype.UUID `json:"role_uuid"`
+	ModuleUuid         pgtype.UUID `json:"module_uuid"`
+	PermissionUuid     pgtype.UUID `json:"permission_uuid"`
+}
+
+func (q *Queries) AddRolePermission(ctx context.Context, arg AddRolePermissionParams) error {
+	_, err := q.db.Exec(ctx, addRolePermission,
+		arg.RolePermissionUuid,
+		arg.RoleUuid,
+		arg.ModuleUuid,
+		arg.PermissionUuid,
+	)
+	return err
+}
+
+const createNewRole = `-- name: CreateNewRole :one
+INSERT INTO role (role_uuid, tenant_uuid, role_name, remarks, created_at, sort_order, is_system) 
+VALUES ($1, $2, $3, $4, NOW(), 0, false) RETURNING role_uuid
+`
+
+type CreateNewRoleParams struct {
+	RoleUuid   pgtype.UUID `json:"role_uuid"`
+	TenantUuid pgtype.UUID `json:"tenant_uuid"`
+	RoleName   string      `json:"role_name"`
+	Remarks    pgtype.Text `json:"remarks"`
+}
+
+func (q *Queries) CreateNewRole(ctx context.Context, arg CreateNewRoleParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, createNewRole,
+		arg.RoleUuid,
+		arg.TenantUuid,
+		arg.RoleName,
+		arg.Remarks,
+	)
+	var role_uuid pgtype.UUID
+	err := row.Scan(&role_uuid)
+	return role_uuid, err
+}
+
+const createRolePermission = `-- name: CreateRolePermission :exec
+INSERT INTO role_permission (role_permission_uuid, role_uuid, module_uuid, permission_uuid, is_granted, created_at)
+VALUES ($1, $2, $3, $4, TRUE, NOW())
+`
+
+type CreateRolePermissionParams struct {
+	RolePermissionUuid pgtype.UUID `json:"role_permission_uuid"`
+	RoleUuid           pgtype.UUID `json:"role_uuid"`
+	ModuleUuid         pgtype.UUID `json:"module_uuid"`
+	PermissionUuid     pgtype.UUID `json:"permission_uuid"`
+}
+
+func (q *Queries) CreateRolePermission(ctx context.Context, arg CreateRolePermissionParams) error {
+	_, err := q.db.Exec(ctx, createRolePermission,
+		arg.RolePermissionUuid,
+		arg.RoleUuid,
+		arg.ModuleUuid,
+		arg.PermissionUuid,
+	)
+	return err
+}
+
+const deleteRolePermission = `-- name: DeleteRolePermission :exec
+UPDATE role_permission SET is_granted = FALSE, updated_at = NOW()
+WHERE role_uuid = $1 AND module_uuid = $2 AND permission_uuid = $3
+`
+
+type DeleteRolePermissionParams struct {
+	RoleUuid       pgtype.UUID `json:"role_uuid"`
+	ModuleUuid     pgtype.UUID `json:"module_uuid"`
+	PermissionUuid pgtype.UUID `json:"permission_uuid"`
+}
+
+func (q *Queries) DeleteRolePermission(ctx context.Context, arg DeleteRolePermissionParams) error {
+	_, err := q.db.Exec(ctx, deleteRolePermission, arg.RoleUuid, arg.ModuleUuid, arg.PermissionUuid)
+	return err
+}
+
+const deleteRolePermissions = `-- name: DeleteRolePermissions :exec
+UPDATE role_permission SET is_granted = FALSE, updated_at = NOW() WHERE role_uuid = $1
+`
+
+func (q *Queries) DeleteRolePermissions(ctx context.Context, roleUuid pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRolePermissions, roleUuid)
+	return err
+}
+
+const getPermissionByCode = `-- name: GetPermissionByCode :one
+SELECT permission_uuid FROM mst_permission WHERE permission_code = $1
+`
+
+func (q *Queries) GetPermissionByCode(ctx context.Context, permissionCode string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getPermissionByCode, permissionCode)
+	var permission_uuid pgtype.UUID
+	err := row.Scan(&permission_uuid)
+	return permission_uuid, err
+}
+
 const getRolePermissions = `-- name: GetRolePermissions :many
-SELECT p.permission_code, rp.role_permission_uuid FROM role_permission rp JOIN mst_permission p ON rp.permission_uuid = p.permission_uuid WHERE rp.role_uuid = $1 AND rp.is_deleted = FALSE AND p.deleted_at IS NULL
+SELECT 
+    r.role_name,
+    m.module_name,
+    p.permission_name AS access_right,
+    p.permission_code,
+    rp.role_permission_uuid,
+    r.role_uuid,
+    m.module_uuid,
+    p.permission_uuid,
+    rp.tenant_uuid,
+    rp.is_granted
+FROM role_permission rp
+JOIN role r ON rp.role_uuid = r.role_uuid
+JOIN mst_permission p ON rp.permission_uuid = p.permission_uuid
+JOIN mst_module m ON rp.module_uuid = m.module_uuid
+WHERE rp.role_uuid = $1 AND p.deleted_at IS NULL
+ORDER BY m.module_name ASC, p.permission_name ASC
 `
 
 type GetRolePermissionsRow struct {
+	RoleName           string      `json:"role_name"`
+	ModuleName         string      `json:"module_name"`
+	AccessRight        string      `json:"access_right"`
 	PermissionCode     string      `json:"permission_code"`
 	RolePermissionUuid pgtype.UUID `json:"role_permission_uuid"`
+	RoleUuid           pgtype.UUID `json:"role_uuid"`
+	ModuleUuid         pgtype.UUID `json:"module_uuid"`
+	PermissionUuid     pgtype.UUID `json:"permission_uuid"`
+	TenantUuid         pgtype.UUID `json:"tenant_uuid"`
+	IsGranted          bool        `json:"is_granted"`
 }
 
 func (q *Queries) GetRolePermissions(ctx context.Context, roleUuid pgtype.UUID) ([]GetRolePermissionsRow, error) {
@@ -29,7 +164,78 @@ func (q *Queries) GetRolePermissions(ctx context.Context, roleUuid pgtype.UUID) 
 	var items []GetRolePermissionsRow
 	for rows.Next() {
 		var i GetRolePermissionsRow
-		if err := rows.Scan(&i.PermissionCode, &i.RolePermissionUuid); err != nil {
+		if err := rows.Scan(
+			&i.RoleName,
+			&i.ModuleName,
+			&i.AccessRight,
+			&i.PermissionCode,
+			&i.RolePermissionUuid,
+			&i.RoleUuid,
+			&i.ModuleUuid,
+			&i.PermissionUuid,
+			&i.TenantUuid,
+			&i.IsGranted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllPermissions = `-- name: ListAllPermissions :many
+SELECT p.permission_code, p.permission_uuid 
+FROM mst_permission p
+WHERE p.deleted_at IS NULL
+`
+
+type ListAllPermissionsRow struct {
+	PermissionCode string      `json:"permission_code"`
+	PermissionUuid pgtype.UUID `json:"permission_uuid"`
+}
+
+func (q *Queries) ListAllPermissions(ctx context.Context) ([]ListAllPermissionsRow, error) {
+	rows, err := q.db.Query(ctx, listAllPermissions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllPermissionsRow
+	for rows.Next() {
+		var i ListAllPermissionsRow
+		if err := rows.Scan(&i.PermissionCode, &i.PermissionUuid); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModules = `-- name: ListModules :many
+SELECT module_uuid, module_name FROM mst_module WHERE is_deleted = FALSE ORDER BY module_name ASC
+`
+
+type ListModulesRow struct {
+	ModuleUuid pgtype.UUID `json:"module_uuid"`
+	ModuleName string      `json:"module_name"`
+}
+
+func (q *Queries) ListModules(ctx context.Context) ([]ListModulesRow, error) {
+	rows, err := q.db.Query(ctx, listModules)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListModulesRow
+	for rows.Next() {
+		var i ListModulesRow
+		if err := rows.Scan(&i.ModuleUuid, &i.ModuleName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -41,14 +247,35 @@ func (q *Queries) GetRolePermissions(ctx context.Context, roleUuid pgtype.UUID) 
 }
 
 const listRoles = `-- name: ListRoles :many
-SELECT r.role_uuid, r.role_name, r.remarks, (SELECT COUNT(DISTINCT uw.user_tenant_uuid) FROM user_workspace uw WHERE uw.role_uuid = r.role_uuid AND uw.is_deleted = FALSE) AS user_count FROM role r WHERE r.is_deleted = FALSE ORDER BY r.sort_order ASC, r.created_at DESC
+SELECT 
+    r.role_uuid, 
+    r.role_name, 
+    r.remarks, 
+    r.created_by_user_uuid,
+    c.first_name AS created_by_first_name,
+    c.last_name AS created_by_last_name,
+    r.updated_by_user_uuid,
+    u.first_name AS updated_by_first_name,
+    u.last_name AS updated_by_last_name,
+    (SELECT COUNT(DISTINCT uw.user_tenant_uuid) FROM user_workspace uw WHERE uw.role_uuid = r.role_uuid AND uw.is_deleted = FALSE) AS user_count 
+FROM role r 
+LEFT JOIN "user" c ON r.created_by_user_uuid = c.user_uuid
+LEFT JOIN "user" u ON r.updated_by_user_uuid = u.user_uuid
+WHERE r.is_deleted = FALSE 
+ORDER BY r.sort_order ASC, r.created_at DESC
 `
 
 type ListRolesRow struct {
-	RoleUuid  pgtype.UUID `json:"role_uuid"`
-	RoleName  string      `json:"role_name"`
-	Remarks   pgtype.Text `json:"remarks"`
-	UserCount int64       `json:"user_count"`
+	RoleUuid           pgtype.UUID `json:"role_uuid"`
+	RoleName           string      `json:"role_name"`
+	Remarks            pgtype.Text `json:"remarks"`
+	CreatedByUserUuid  pgtype.UUID `json:"created_by_user_uuid"`
+	CreatedByFirstName pgtype.Text `json:"created_by_first_name"`
+	CreatedByLastName  pgtype.Text `json:"created_by_last_name"`
+	UpdatedByUserUuid  pgtype.UUID `json:"updated_by_user_uuid"`
+	UpdatedByFirstName pgtype.Text `json:"updated_by_first_name"`
+	UpdatedByLastName  pgtype.Text `json:"updated_by_last_name"`
+	UserCount          int64       `json:"user_count"`
 }
 
 func (q *Queries) ListRoles(ctx context.Context) ([]ListRolesRow, error) {
@@ -64,6 +291,12 @@ func (q *Queries) ListRoles(ctx context.Context) ([]ListRolesRow, error) {
 			&i.RoleUuid,
 			&i.RoleName,
 			&i.Remarks,
+			&i.CreatedByUserUuid,
+			&i.CreatedByFirstName,
+			&i.CreatedByLastName,
+			&i.UpdatedByUserUuid,
+			&i.UpdatedByFirstName,
+			&i.UpdatedByLastName,
 			&i.UserCount,
 		); err != nil {
 			return nil, err

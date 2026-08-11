@@ -15,6 +15,9 @@ type LoginResponse struct {
 	Token       string   `json:"token"`
 	UserID      string   `json:"user_id"`
 	Role        string   `json:"role"`
+	RoleID      string   `json:"role_id"`
+	TenantID    *string  `json:"tenant_id,omitempty"`
+	TenantName  *string  `json:"tenant_name,omitempty"`
 	Permissions []string `json:"permissions"`
 }
 
@@ -39,15 +42,29 @@ func (h *Handler) Login(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid email or password")
 	}
 
-	var permissions []string
+	permissions := make([]string, 0)
 	for p := range actor.Permissions {
 		permissions = append(permissions, p)
+	}
+
+	var tID *string
+	if actor.TenantID != nil {
+		idStr := actor.TenantID.String()
+		tID = &idStr
+	}
+
+	var tName *string
+	if actor.TenantName != "" {
+		tName = &actor.TenantName
 	}
 
 	return c.JSON(http.StatusOK, LoginResponse{
 		Token:       token,
 		UserID:      actor.UserID.String(),
 		Role:        actor.Role,
+		RoleID:      actor.RoleID,
+		TenantID:    tID,
+		TenantName:  tName,
 		Permissions: permissions,
 	})
 }
@@ -59,15 +76,28 @@ func (h *Handler) GetMe(c echo.Context) error {
 	}
 
 	// Convert the map to a slice of strings for the JSON response
-	var permissions []string
+	permissions := make([]string, 0)
 	for p := range actor.Permissions {
 		permissions = append(permissions, p)
 	}
 
+	var tID *string
+	if actor.TenantID != nil {
+		idStr := actor.TenantID.String()
+		tID = &idStr
+	}
+
+	var tName *string
+	if actor.TenantName != "" {
+		tName = &actor.TenantName
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"user_id":     actor.UserID,
-		"tenant_id":   actor.TenantID,
+		"tenant_id":   tID,
+		"tenant_name": tName,
 		"role":        actor.Role,
+		"role_id":     actor.RoleID,
 		"permissions": permissions,
 	})
 }

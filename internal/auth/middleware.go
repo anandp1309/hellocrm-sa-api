@@ -30,12 +30,12 @@ func (m *Middleware) RequireAuth(next echo.HandlerFunc) echo.HandlerFunc {
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		
-		userID, err := m.authService.ParseToken(tokenString)
+		userID, roleID, err := m.authService.ParseToken(tokenString)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
 		}
 
-		actor, err := m.authService.GetActorContext(c.Request().Context(), userID)
+		actor, err := m.authService.GetActorContext(c.Request().Context(), userID, roleID)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to load permissions")
 		}

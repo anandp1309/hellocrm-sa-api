@@ -2,15 +2,17 @@ package role
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"hellocrm-superadmin/internal/platform/database/db"
 )
 
 type QueryService interface {
 	ListRoles(ctx context.Context) ([]RoleView, error)
 	GetRolePermissions(ctx context.Context, id string) ([]PermissionView, error)
+	GetPermissionsTemplate(ctx context.Context) ([]PermissionView, error)
 }
 
 type queryService struct {
@@ -22,25 +24,44 @@ func NewQueryService(repo Repository) QueryService {
 }
 
 type RoleView struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Desc       string `json:"desc"`
-	Count      int64  `json:"count"`
-	Active     bool   `json:"active"`
-	ColorClass string `json:"colorClass"`
-	Icon       string `json:"icon"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Desc               string `json:"desc"`
+	Count              int64  `json:"count"`
+	Active             bool   `json:"active"`
+	ColorClass         string `json:"colorClass"`
+	Icon               string `json:"icon"`
+	CreatedByUserUuid  string `json:"createdByUserUuid,omitempty"`
+	CreatedByFirstName string `json:"createdByFirstName,omitempty"`
+	CreatedByLastName  string `json:"createdByLastName,omitempty"`
+	UpdatedByUserUuid  string `json:"updatedByUserUuid,omitempty"`
+	UpdatedByFirstName string `json:"updatedByFirstName,omitempty"`
+	UpdatedByLastName  string `json:"updatedByLastName,omitempty"`
 }
 
 type PermissionView struct {
-	Module    string `json:"module"`
-	IconColor string `json:"iconColor"`
-	V         string `json:"v"`
-	C         string `json:"c"`
-	E         string `json:"e"`
-	D         string `json:"d"`
-	X         string `json:"x"`
-	I         string `json:"i"`
-	M         string `json:"m"`
+	ModuleUuid string `json:"moduleUuid"`
+	Module     string `json:"module"`
+	IconColor  string `json:"iconColor"`
+	V          bool   `json:"v"`
+	V_Uuid     string `json:"v_uuid"`
+	C          bool   `json:"c"`
+	C_Uuid     string `json:"c_uuid"`
+	E          bool   `json:"e"`
+	E_Uuid     string `json:"e_uuid"`
+	D          bool   `json:"d"`
+	D_Uuid     string `json:"d_uuid"`
+	X          bool   `json:"x"`
+	X_Uuid     string `json:"x_uuid"`
+	I          bool   `json:"i"`
+	I_Uuid     string `json:"i_uuid"`
+	M          bool   `json:"m"`
+	M_Uuid     string `json:"m_uuid"`
+}
+
+type ActionInfo struct {
+	Status bool
+	Uuid   string
 }
 
 func (s *queryService) ListRoles(ctx context.Context) ([]RoleView, error) {
@@ -69,84 +90,158 @@ func (s *queryService) ListRoles(ctx context.Context) ([]RoleView, error) {
 			icon = "M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.168a2 2 0 11-2.829-2.83 2 2 0 012.829 2.83z"
 		}
 
-		uuidStr := fmt.Sprintf("%x-%x-%x-%x-%x", row.RoleUuid.Bytes[0:4], row.RoleUuid.Bytes[4:6], row.RoleUuid.Bytes[6:8], row.RoleUuid.Bytes[8:10], row.RoleUuid.Bytes[10:16])
-		
+		uuidStr := uuid.UUID(row.RoleUuid.Bytes).String()
+
+		var createdByUuid, updatedByUuid string
+		if row.CreatedByUserUuid.Valid {
+			createdByUuid = uuid.UUID(row.CreatedByUserUuid.Bytes).String()
+		}
+		if row.UpdatedByUserUuid.Valid {
+			updatedByUuid = uuid.UUID(row.UpdatedByUserUuid.Bytes).String()
+		}
+
 		data = append(data, RoleView{
-			ID:         uuidStr,
-			Name:       row.RoleName,
-			Desc:       row.Remarks.String,
-			Count:      row.UserCount,
-			Active:     i == 0,
-			ColorClass: colorClass,
-			Icon:       icon,
+			ID:                 uuidStr,
+			Name:               row.RoleName,
+			Desc:               row.Remarks.String,
+			Count:              row.UserCount,
+			Active:             i == 0,
+			ColorClass:         colorClass,
+			Icon:               icon,
+			CreatedByUserUuid:  createdByUuid,
+			CreatedByFirstName: row.CreatedByFirstName.String,
+			CreatedByLastName:  row.CreatedByLastName.String,
+			UpdatedByUserUuid:  updatedByUuid,
+			UpdatedByFirstName: row.UpdatedByFirstName.String,
+			UpdatedByLastName:  row.UpdatedByLastName.String,
 		})
 	}
 	return data, nil
 }
 
+type FlatPermissionView struct {
+	RoleName           string `json:"roleName"`
+	ModuleName         string `json:"moduleName"`
+	AccessRight        string `json:"accessRight"`
+	PermissionCode     string `json:"permissionCode"`
+	RolePermissionUuid string `json:"rolePermissionUuid"`
+	RoleUuid           string `json:"roleUuid"`
+	ModuleUuid         string `json:"moduleUuid"`
+	PermissionUuid     string `json:"permissionUuid"`
+	TenantUuid         string `json:"tenantUuid"`
+}
+
 func (s *queryService) GetRolePermissions(ctx context.Context, id string) ([]PermissionView, error) {
-	var uuid pgtype.UUID
-	err := uuid.Scan(id)
+	var pgRoleID pgtype.UUID
+	err := pgRoleID.Scan(id)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := s.repo.GetRolePermissions(ctx, uuid)
+	// 1. Fetch active permissions for the role
+	activeRows, err := s.repo.GetRolePermissions(ctx, pgRoleID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Map of module -> permission map
-	moduleMap := make(map[string]map[string]string)
-	
-	for _, row := range rows {
-		code := row.PermissionCode
-		parts := strings.Split(code, "_")
-		if len(parts) >= 2 {
-			module := parts[0]
-			action := parts[1]
-			
-			if _, ok := moduleMap[module]; !ok {
-				moduleMap[module] = map[string]string{
-					"v": "n", "c": "n", "e": "n", "d": "n", "x": "n", "i": "n", "m": "n",
-				}
+	// 2. Fetch all permissions and modules for the template
+	allPerms, err := s.repo.ListAllPermissions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	modules, err := s.repo.ListModules(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Build the template map
+	templateMap := buildTemplateMap(allPerms, modules)
+
+	// 4. Update the template map with active permissions
+	for _, row := range activeRows {
+		module := row.ModuleName
+		key := row.PermissionCode
+		if _, ok := templateMap[module]; ok {
+			if _, ok2 := templateMap[module][key]; ok2 {
+				// Mark as the boolean status of IsGranted
+				info := templateMap[module][key]
+				info.Status = row.IsGranted
+				templateMap[module][key] = info
 			}
-			
-			actionLower := strings.ToLower(action)
-			if actionLower == "view" { moduleMap[module]["v"] = "y" }
-			if actionLower == "create" { moduleMap[module]["c"] = "y" }
-			if actionLower == "edit" { moduleMap[module]["e"] = "y" }
-			if actionLower == "delete" { moduleMap[module]["d"] = "y" }
-			if actionLower == "export" { moduleMap[module]["x"] = "y" }
-			if actionLower == "import" { moduleMap[module]["i"] = "y" }
-			if actionLower == "manage" { moduleMap[module]["m"] = "y" }
 		}
 	}
 
-	// Default modules if none exist (for UI testing)
-	if len(moduleMap) == 0 {
-		return []PermissionView{
-			{Module: "Dashboard", IconColor: "text-indigo-600", V: "y", C: "y", E: "y", D: "y", X: "y", I: "y", M: "y"},
-			{Module: "Customers", IconColor: "text-blue-500", V: "y", C: "y", E: "y", D: "y", X: "y", I: "y", M: "y"},
-			{Module: "Subscriptions", IconColor: "text-green-500", V: "y", C: "y", E: "y", D: "y", X: "y", I: "y", M: "y"},
-			{Module: "Roles & Permissions", IconColor: "text-green-600", V: "y", C: "y", E: "y", D: "y", X: "y", I: "y", M: "y"},
-		}, nil
+	// 5. Convert the map to the PermissionView array
+	return s.buildPermissionViews(ctx, templateMap)
+}
+
+func (s *queryService) GetPermissionsTemplate(ctx context.Context) ([]PermissionView, error) {
+	allPerms, err := s.repo.ListAllPermissions(ctx)
+	if err != nil {
+		return nil, err
 	}
 
+	modules, err := s.repo.ListModules(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	templateMap := buildTemplateMap(allPerms, modules)
+	return s.buildPermissionViews(ctx, templateMap)
+}
+
+func buildTemplateMap(allPerms []db.ListAllPermissionsRow, modules []db.ListModulesRow) map[string]map[string]ActionInfo {
+	templateMap := make(map[string]map[string]ActionInfo)
+	for _, mRow := range modules {
+		module := mRow.ModuleName
+		templateMap[module] = map[string]ActionInfo{
+			"v": {false, ""}, "c": {false, ""}, "e": {false, ""}, "d": {false, ""},
+			"x": {false, ""}, "i": {false, ""}, "m": {false, ""},
+		}
+		
+		for _, row := range allPerms {
+			pUuidStr := uuid.UUID(row.PermissionUuid.Bytes).String()
+			key := row.PermissionCode
+			if _, ok := templateMap[module][key]; ok {
+				templateMap[module][key] = ActionInfo{false, pUuidStr}
+			}
+		}
+	}
+	return templateMap
+}
+
+func (s *queryService) buildPermissionViews(ctx context.Context, templateMap map[string]map[string]ActionInfo) ([]PermissionView, error) {
 	var perms []PermissionView
-	for module, actions := range moduleMap {
-		perms = append(perms, PermissionView{
-			Module:    module,
-			IconColor: "text-indigo-600",
-			V:         actions["v"],
-			C:         actions["c"],
-			E:         actions["e"],
-			D:         actions["d"],
-			X:         actions["x"],
-			I:         actions["i"],
-			M:         actions["m"],
-		})
+	modules, err := s.repo.ListModules(ctx)
+	if err != nil {
+		return nil, err
 	}
 
+	for _, mRow := range modules {
+		m := mRow.ModuleName
+		uuidStr := uuid.UUID(mRow.ModuleUuid.Bytes).String()
+		if actions, ok := templateMap[m]; ok {
+			perms = append(perms, PermissionView{
+				ModuleUuid: uuidStr,
+				Module:     m,
+				IconColor:  "text-indigo-600",
+				V:          actions["v"].Status, V_Uuid: actions["v"].Uuid,
+				C:          actions["c"].Status, C_Uuid: actions["c"].Uuid,
+				E:          actions["e"].Status, E_Uuid: actions["e"].Uuid,
+				D:          actions["d"].Status, D_Uuid: actions["d"].Uuid,
+				X:          actions["x"].Status, X_Uuid: actions["x"].Uuid,
+				I:          actions["i"].Status, I_Uuid: actions["i"].Uuid,
+				M:          actions["m"].Status, M_Uuid: actions["m"].Uuid,
+			})
+		} else {
+			perms = append(perms, PermissionView{
+				ModuleUuid: uuidStr,
+				Module:     m,
+				IconColor:  "text-indigo-600",
+				V: false, C: false, E: false, D: false, X: false, I: false, M: false,
+			})
+		}
+	}
 	return perms, nil
 }
