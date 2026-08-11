@@ -17,7 +17,10 @@ func main() {
 	// Force load the exact absolute path to the API project's .env file (for local dev)
 	_ = godotenv.Overload("C:/hellocrm-superadmin/EZ_Engineering_OS_v1.0_Final/.env")
 
-	e, dbPool := server.BuildApp()
+	e, dbPool, err := server.BuildApp()
+	if err != nil {
+		log.Fatalf("Failed to initialize app: %v", err)
+	}
 	defer dbPool.Close()
 
 	// Start server gracefully

@@ -40,7 +40,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
-func BuildApp() (*echo.Echo, *pgxpool.Pool) {
+func BuildApp() (*echo.Echo, *pgxpool.Pool, error) {
 	// Initialize Echo instance
 	e := echo.New()
 
@@ -70,13 +70,12 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool) {
 	// Database connection
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		// Provide a fallback or log fatal if required
-		log.Fatal("DATABASE_URL environment variable is not set")
+		return nil, nil, os.ErrNotExist // Or a custom error
 	}
 
 	dbPool, err := pgxpool.New(context.Background(), dbURL)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v", err)
+		return nil, nil, err
 	}
 
 	// Dependency Injection
@@ -90,7 +89,7 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool) {
 	
 	enforcer, err := auth.NewCasbinEnforcer(queries)
 	if err != nil {
-		log.Fatalf("Unable to initialize Casbin enforcer: %v", err)
+		return nil, nil, err
 	}
 
 	authService := auth.NewService(queries, []byte(jwtSecret))
@@ -209,5 +208,5 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool) {
 	addonHandler := addon.NewHandler(addonCmd, addonQuery)
 	addonHandler.RegisterRoutes(v1)
 
-	return e, dbPool
+	return e, dbPool, nil
 }

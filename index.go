@@ -11,13 +11,18 @@ import (
 
 var e *echo.Echo
 var dbPool *pgxpool.Pool
+var initErr error
 
 func init() {
 	// Initialize the app once per lambda container
-	e, dbPool = server.BuildApp()
+	e, dbPool, initErr = server.BuildApp()
 }
 
 // Handler is the serverless entrypoint for Vercel
 func Handler(w http.ResponseWriter, r *http.Request) {
+	if initErr != nil {
+		http.Error(w, "Startup Error: "+initErr.Error(), http.StatusInternalServerError)
+		return
+	}
 	e.ServeHTTP(w, r)
 }
