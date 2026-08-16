@@ -60,8 +60,8 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool) {
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: allowOrigins,
-		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
-		AllowMethods: []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, "X-Requested-With", "Cache-Control"},
+		AllowMethods: []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete, http.MethodOptions},
 	}))
 
 	// Infrastructure
@@ -95,7 +95,13 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool) {
 
 	authService := auth.NewService(queries, []byte(jwtSecret))
 	authMW := auth.NewMiddleware(authService, enforcer)
-	authHandler := auth.NewHandler(authService)
+
+	roleRepo := role.NewRepository(queries)
+	roleQuery := role.NewQueryService(roleRepo)
+	roleCommand := role.NewCommandService(roleRepo)
+	roleHandler := role.NewHandler(roleQuery, roleCommand)
+
+	authHandler := auth.NewHandler(authService, roleQuery)
 
 	// Features
 	tenantRepo := tenant.NewRepository(queries)
@@ -148,10 +154,6 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool) {
 	adminCommand := admin.NewCommandService(adminRepo)
 	adminHandler := admin.NewHandler(adminQuery, adminCommand)
 
-	roleRepo := role.NewRepository(queries)
-	roleQuery := role.NewQueryService(roleRepo)
-	roleCommand := role.NewCommandService(roleRepo)
-	roleHandler := role.NewHandler(roleQuery, roleCommand)
 
 	auditLogHandler := auditlog.NewHandler()
 	jobsHandler := jobs.NewHandler()

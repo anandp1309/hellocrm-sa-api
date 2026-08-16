@@ -1150,6 +1150,22 @@ type Storage struct {
 	DeletedByUserUuid  pgtype.UUID        `json:"deleted_by_user_uuid"`
 }
 
+type SupportTicket struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	UserID               pgtype.UUID        `json:"user_id"`
+	Subject              string             `json:"subject"`
+	Description          string             `json:"description"`
+	Status               string             `json:"status"`
+	Priority             string             `json:"priority"`
+	ReopenCount          pgtype.Int4        `json:"reopen_count"`
+	CustomerSatisfaction pgtype.Text        `json:"customer_satisfaction"`
+	Rating               pgtype.Int4        `json:"rating"`
+	AssignedTo           pgtype.UUID        `json:"assigned_to"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Tag struct {
 	TagUuid            pgtype.UUID        `json:"tag_uuid"`
 	TenantUuid         pgtype.UUID        `json:"tenant_uuid"`

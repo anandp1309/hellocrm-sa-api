@@ -28,6 +28,7 @@ import (
 	"hellocrm-superadmin/internal/platform/database/db"
 	"hellocrm-superadmin/internal/platform/websocket"
 	"hellocrm-superadmin/internal/subscription"
+	"hellocrm-superadmin/internal/support"
 	"hellocrm-superadmin/internal/tenant"
 	"hellocrm-superadmin/internal/universal"
 	"hellocrm-superadmin/internal/usage"
@@ -59,8 +60,8 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool, error) {
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: allowOrigins,
-		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
-		AllowMethods: []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, "X-Requested-With", "Cache-Control"},
+		AllowMethods: []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete, http.MethodOptions},
 	}))
 
 	// Infrastructure
@@ -93,7 +94,13 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool, error) {
 
 	authService := auth.NewService(queries, []byte(jwtSecret))
 	authMW := auth.NewMiddleware(authService, enforcer)
-	authHandler := auth.NewHandler(authService)
+
+	roleRepo := role.NewRepository(queries)
+	roleQuery := role.NewQueryService(roleRepo)
+	roleCommand := role.NewCommandService(roleRepo)
+	roleHandler := role.NewHandler(roleQuery, roleCommand)
+
+	authHandler := auth.NewHandler(authService, roleQuery)
 
 	// Features
 	tenantRepo := tenant.NewRepository(queries)
@@ -146,10 +153,6 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool, error) {
 	adminCommand := admin.NewCommandService(adminRepo)
 	adminHandler := admin.NewHandler(adminQuery, adminCommand)
 
-	roleRepo := role.NewRepository(queries)
-	roleQuery := role.NewQueryService(roleRepo)
-	roleCommand := role.NewCommandService(roleRepo)
-	roleHandler := role.NewHandler(roleQuery, roleCommand)
 
 	auditLogHandler := auditlog.NewHandler()
 	jobsHandler := jobs.NewHandler()
@@ -181,6 +184,9 @@ func BuildApp() (*echo.Echo, *pgxpool.Pool, error) {
 	invoiceHandler.RegisterRoutes(v1)
 	adminHandler.RegisterRoutes(v1)
 	roleHandler.RegisterRoutes(v1)
+	
+	// Register Support Tickets endpoints
+	support.RegisterRoutes(v1, queries)
 	
 	auditLogHandler.RegisterRoutes(v1)
 	jobsHandler.RegisterRoutes(v1)

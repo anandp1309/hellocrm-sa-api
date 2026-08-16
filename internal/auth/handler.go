@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"hellocrm-superadmin/internal/role"
 )
 
 type LoginRequest struct {
@@ -18,16 +19,17 @@ type LoginResponse struct {
 	RoleID      string   `json:"role_id"`
 	TenantID    *string  `json:"tenant_id,omitempty"`
 	TenantName  *string  `json:"tenant_name,omitempty"`
-	Permissions []string `json:"permissions"`
 }
 
 type Handler struct {
 	authService *Service
+	roleQuery   role.QueryService
 }
 
-func NewHandler(authService *Service) *Handler {
+func NewHandler(authService *Service, roleQuery role.QueryService) *Handler {
 	return &Handler{
 		authService: authService,
+		roleQuery:   roleQuery,
 	}
 }
 
@@ -42,10 +44,8 @@ func (h *Handler) Login(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid email or password")
 	}
 
-	permissions := make([]string, 0)
-	for p := range actor.Permissions {
-		permissions = append(permissions, p)
-	}
+	// Permissions are intentionally omitted here.
+	// The frontend will call /api/v1/auth/me to fetch them.
 
 	var tID *string
 	if actor.TenantID != nil {
@@ -65,7 +65,6 @@ func (h *Handler) Login(c echo.Context) error {
 		RoleID:      actor.RoleID,
 		TenantID:    tID,
 		TenantName:  tName,
-		Permissions: permissions,
 	})
 }
 
@@ -73,12 +72,6 @@ func (h *Handler) GetMe(c echo.Context) error {
 	actor, err := ActorFromEcho(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Failed to get user context")
-	}
-
-	// Convert the map to a slice of strings for the JSON response
-	permissions := make([]string, 0)
-	for p := range actor.Permissions {
-		permissions = append(permissions, p)
 	}
 
 	var tID *string
@@ -98,7 +91,6 @@ func (h *Handler) GetMe(c echo.Context) error {
 		"tenant_name": tName,
 		"role":        actor.Role,
 		"role_id":     actor.RoleID,
-		"permissions": permissions,
 	})
 }
 

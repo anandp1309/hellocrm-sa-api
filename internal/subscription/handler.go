@@ -27,6 +27,14 @@ func (h *Handler) RegisterRoutes(g *echo.Group) {
 	subs.GET("", h.List)
 	subs.PUT("/:id", h.Update)
 	subs.DELETE("/:id", h.Cancel) // Often cancel rather than hard delete for subscriptions
+	
+	// Mock endpoints for Subscription Details Sections
+	subs.GET("/:id/details", h.GetDetailsMock)
+	subs.GET("/:id/addons", h.GetAddonsMock)
+	subs.GET("/:id/renewals", h.GetRenewalsMock)
+	subs.GET("/:id/payments", h.GetPaymentsMock)
+	subs.GET("/:id/usage", h.GetUsageMock)
+	subs.GET("/:id/activity", h.GetActivityMock)
 }
 
 type createSubscriptionRequest struct {
@@ -217,13 +225,85 @@ func (h *Handler) Update(c echo.Context) error {
 func (h *Handler) Cancel(c echo.Context) error {
 	id := c.Param("id")
 	if id == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid ID")
+		return echo.NewHTTPError(http.StatusBadRequest, "Missing subscription ID")
 	}
 
 	err := h.commands.CancelSubscription(c.Request().Context(), id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusUnprocessableEntity, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to cancel subscription")
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	return c.JSON(http.StatusOK, map[string]interface{}{"message": "Subscription cancelled"})
+}
+
+// MOCK ENDPOINTS for UI UI
+
+func (h *Handler) GetDetailsMock(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"planName": "Professional Plan",
+			"planType": "Builder",
+			"billingCycle": "Monthly",
+			"usersIncluded": 10,
+			"workspacesIncluded": 5,
+			"trialDays": 0,
+			"planAmount": "₹ 9,999 / month",
+			"companyName": "Green Valley Builders",
+			"contactPerson": "Amit Sharma",
+			"email": "manager@greenvalley.com",
+			"phone": "+91 98765 43210",
+			"gstNumber": "27ABCDE1234F1Z5",
+			"customerSince": "15 May 2026",
+			"totalWorkspaces": 3,
+			"totalUsers": 7,
+		},
+	})
+}
+
+func (h *Handler) GetAddonsMock(c echo.Context) error {
+	addons := []map[string]interface{}{
+		{"name": "Extra Users Pack", "quantity": "5 Users", "cycle": "Monthly", "expiryDate": "30 Jun 2026", "status": "Active"},
+		{"name": "SMS Pack - 5000", "quantity": "1 Pack", "cycle": "Monthly", "expiryDate": "30 Jun 2026", "status": "Active"},
+		{"name": "Storage 20 GB", "quantity": "1 Pack", "cycle": "Monthly", "expiryDate": "30 Jun 2026", "status": "Active"},
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": addons})
+}
+
+func (h *Handler) GetRenewalsMock(c echo.Context) error {
+	renewals := []map[string]interface{}{
+		{"date": "01 Jul 2026", "plan": "Professional Plan", "cycle": "Monthly", "duration": "01 Jun 2026 - 30 Jun 2026", "amount": "₹ 9,999", "status": "Paid", "renewedBy": "Super Admin", "isUpgraded": false},
+		{"date": "01 Jun 2026", "plan": "Professional Plan", "cycle": "Monthly", "duration": "01 May 2026 - 31 May 2026", "amount": "₹ 9,999", "status": "Paid", "renewedBy": "Super Admin", "isUpgraded": false},
+		{"date": "15 Feb 2026", "plan": "Upgraded to Professional Plan", "cycle": "Monthly", "duration": "15 Feb 2026 - 28 Feb 2026", "amount": "₹ 5,000", "status": "Paid", "renewedBy": "Super Admin", "isUpgraded": true},
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"totalRenewals": 3,
+			"onTime": "3 (100%)",
+			"upcomingRenewal": "01 Jul 2026",
+			"status": "Active",
+			"history": renewals,
+		},
+	})
+}
+
+func (h *Handler) GetPaymentsMock(c echo.Context) error {
+	payments := []map[string]interface{}{
+		{"invoiceNo": "INV-2026-0612", "invoiceDate": "01 Jul 2026", "amount": "₹ 8,473.73", "gst": "₹ 1,522.27", "totalAmount": "₹ 9,999.00", "paymentMethod": "Razorpay", "paymentDate": "01 Jul 2026", "status": "Paid"},
+		{"invoiceNo": "INV-2026-0131", "invoiceDate": "31 Jan 2026", "amount": "₹ 0.00", "gst": "₹ 0.00", "totalAmount": "₹ 0.00", "paymentMethod": "—", "paymentDate": "31 Jan 2026", "status": "Free Trial"},
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": payments})
+}
+
+func (h *Handler) GetUsageMock(c echo.Context) error {
+	usage := []map[string]interface{}{
+		{"type": "Users", "used": 7, "allocated": 10, "percentage": 70},
+		{"type": "Workspaces", "used": 3, "allocated": 5, "percentage": 60},
+		{"type": "Storage", "used": "12.4 GB", "allocated": "25 GB", "percentage": 50},
+		{"type": "SMS", "used": "2,150", "allocated": "5,000", "percentage": 43},
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": usage})
+}
+
+func (h *Handler) GetActivityMock(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": []string{}})
 }

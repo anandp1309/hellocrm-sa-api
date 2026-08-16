@@ -14,8 +14,8 @@ import (
 )
 
 func main() {
-	// Force load the exact absolute path to the API project's .env file (for local dev)
-	_ = godotenv.Overload("C:/hellocrm-superadmin/EZ_Engineering_OS_v1.0_Final/.env")
+	// Load the .env file in the current directory
+	_ = godotenv.Overload(".env")
 
 	e, dbPool, err := server.BuildApp()
 	if err != nil {
