@@ -149,6 +149,21 @@ func (h *Handler) RateTicket(c echo.Context) error {
 	})
 }
 
+func (h *Handler) GetTicket(c echo.Context) error {
+	ticketID := c.Param("id")
+	var tUUID pgtype.UUID
+	tUUID.Scan(ticketID)
+
+	ticket, err := h.Queries.GetSupportTicket(context.Background(), tUUID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"data": ticket,
+	})
+}
+
 func RegisterRoutes(e *echo.Group, queries *db.Queries) {
 	handler := &Handler{Queries: queries}
 
@@ -156,6 +171,7 @@ func RegisterRoutes(e *echo.Group, queries *db.Queries) {
 	supportGroup.POST("", handler.CreateSupportTicket)
 	supportGroup.GET("/open", handler.ListOpenTickets)
 	supportGroup.GET("/closed", handler.ListClosedTickets)
+	supportGroup.GET("/:id", handler.GetTicket)
 	supportGroup.POST("/:id/reopen", handler.ReopenTicket)
 	supportGroup.PUT("/:id/status", handler.UpdateStatus)
 	supportGroup.POST("/:id/rate", handler.RateTicket)
